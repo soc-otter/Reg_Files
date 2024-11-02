@@ -1,5 +1,5 @@
 Windows Registry Editor Version 5.00
-; This `.reg` file allows you to right-click on any file and quickly identify useful information about it. 
+; This `.reg` file allows you to right-click on any file and quickly identify useful information about it via menu options.
 ; As admin, open cmd.exe, type "<path_to_file>\File_Analysis_Quick_Menu.reg", and press enter.
 ; 1. Show File Size
 ; 2. Show File Dates
@@ -12,144 +12,145 @@ Windows Registry Editor Version 5.00
 ; 9. Hashes
 ; 10. Digital Signature
 ; 11. File Version and other metadata
+; https://github.com/soc-otter/Reg_Files/blob/main/File_Analysis_Quick_Menu.reg
 
 ; File Analysis Context Menu
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis]
 "MUIVerb"="Analyze File"
 "SubCommands"=""
 
 ; Complete File Analysis
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\01fullanalysis]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\01fullanalysis]
 "MUIVerb"="Complete File Analysis"
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\01fullanalysis\command]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\01fullanalysis\command]
 @="powershell.exe -NoExit -Command \"$ErrorActionPreference='SilentlyContinue'; $fp='\"%1\"'; function nf($v){ if([string]::IsNullOrWhiteSpace($v)){ '-' }else{ $v } } if(Test-Path -LiteralPath $fp){ $fi=Get-Item -LiteralPath $fp; $fs=$fi.Length; $ct=$fi.CreationTime; $mt=$fi.LastWriteTime; $at=$fi.LastAccessTime; $own=(Get-Acl -LiteralPath $fp).Owner; }else{ $fs='-'; $ct='-'; $mt='-'; $at='-'; $own='-'; } function Format-FileSize{ param([double]$s); if($s -eq '-'){ '-' }else{ $u=@('bytes','KB','MB','GB','TB','PB'); $i=0; while($s -ge 1KB -and $i -lt $u.Count-1){ $s/=1KB; $i++ } '{0:N2} {1}' -f $s,$u[$i] } } $fsz=Format-FileSize $fs; $sig=Get-AuthenticodeSignature -LiteralPath $fp; $sigStatus=nf $sig.Status; $sigStatusMsg=nf $sig.StatusMessage; $sigPath=nf $sig.Path; $sigType=nf $sig.SignatureType; $isOSBin=if($sig.IsOSBinary -ne $null){ $sig.IsOSBinary }else{ '-' } $sigCert='-'; if($sig.SignerCertificate){ $sigCert=nf $sig.SignerCertificate.Subject } $tsCert='-'; if($sig.TimeStamperCertificate){ $tsCert=nf $sig.TimeStamperCertificate.Subject } $vi=[Diagnostics.FileVersionInfo]::GetVersionInfo($fp); $ofn=nf $vi.OriginalFilename; $fd=nf $vi.FileDescription; $pn=nf $vi.ProductName; $cn=nf $vi.CompanyName; $fv=nf $vi.FileVersion; $pv=nf $vi.ProductVersion; $lang=nf $vi.Language; $zi='-'; $ref='-'; $df='-'; $zd=Get-Content -LiteralPath $fp -Stream Zone.Identifier -EA SilentlyContinue; if($zd){ foreach($l in $zd){ if($l -match '^ZoneId=(.+)$'){ $zi=$matches[1] }elseif($l -match '^ReferrerUrl=(.+)$'){ $ref=$matches[1] }elseif($l -match '^HostUrl=(.+)$'){ $df=$matches[1] } } } $hs=@(); $algs=@('MD5','SHA1','SHA256','SHA384','SHA512'); $unsupportedAlgs=@(); foreach($a in $algs){ try{ $h=Get-FileHash -LiteralPath $fp -Algorithm $a; $hs+=[PSCustomObject]@{Algorithm=$h.Algorithm;Hash=$h.Hash} }catch{ $unsupportedAlgs+=$a } } $hdStreams=@(); $st=Get-Item -LiteralPath $fp -Stream * -EA SilentlyContinue; if($st){ $sl=$st | Where-Object { ($_.Stream.TrimStart(':')).ToLower() -ne '$data' -and ($_.Stream.TrimStart(':')).ToLower() -ne 'zone.identifier' }; if($sl){ foreach($s in $sl){ $streamName=$s.Stream.TrimStart(':'); try{ $content=Get-Content -LiteralPath $fp -Stream $s.Stream -Raw -ErrorAction Stop; if($content -eq ''){ $content='[Empty Stream]' } }catch{ $content='[Unable to read stream]' } $hdStreams+=[PSCustomObject]@{'Stream Name'=$streamName; 'Content'=$content} } } } Write-Host '=== File Analysis Report ==='; Write-Host ''; $data = @( [PSCustomObject]@{ Category='Basic Information'; Property='File Path'; Value=$fp }, [PSCustomObject]@{ Category='Basic Information'; Property='File Size'; Value=$fsz }, [PSCustomObject]@{ Category='Basic Information'; Property='Owner'; Value=$own }, [PSCustomObject]@{ Category='Timestamps'; Property='Created'; Value=$ct }, [PSCustomObject]@{ Category='Timestamps'; Property='Modified'; Value=$mt }, [PSCustomObject]@{ Category='Timestamps'; Property='Accessed'; Value=$at }, [PSCustomObject]@{ Category='Security'; Property='Is OS Binary'; Value=$isOSBin }, [PSCustomObject]@{ Category='Digital Signature'; Property='Status'; Value=$sigStatus }, [PSCustomObject]@{ Category='Digital Signature'; Property='Message'; Value=$sigStatusMsg }, [PSCustomObject]@{ Category='Digital Signature'; Property='Path'; Value=$sigPath }, [PSCustomObject]@{ Category='Digital Signature'; Property='Type'; Value=$sigType }, [PSCustomObject]@{ Category='Digital Signature'; Property='Signer Certificate'; Value=$sigCert }, [PSCustomObject]@{ Category='Digital Signature'; Property='Timestamp Certificate'; Value=$tsCert }, [PSCustomObject]@{ Category='Download Info'; Property='Zone ID'; Value=$zi }, [PSCustomObject]@{ Category='Download Info'; Property='Referrer URL'; Value=$ref }, [PSCustomObject]@{ Category='Download Info'; Property='Downloaded From'; Value=$df }, [PSCustomObject]@{ Category='Version Info'; Property='Original Filename'; Value=$ofn }, [PSCustomObject]@{ Category='Version Info'; Property='File Description'; Value=$fd }, [PSCustomObject]@{ Category='Version Info'; Property='Product Name'; Value=$pn }, [PSCustomObject]@{ Category='Version Info'; Property='Company Name'; Value=$cn }, [PSCustomObject]@{ Category='Version Info'; Property='File Version'; Value=$fv }, [PSCustomObject]@{ Category='Version Info'; Property='Product Version'; Value=$pv }, [PSCustomObject]@{ Category='Version Info'; Property='Language'; Value=$lang } ); $currentCategory = ''; foreach ($item in ($data | Sort-Object Category)) { if ($item.Category -ne $currentCategory) { Write-Host ''; Write-Host ('=' * 20) $item.Category ('=' * 20); Write-Host ''; $currentCategory = $item.Category; } Write-Host ('{0,-25}: {1}' -f $item.Property, $item.Value) } if($hs){ Write-Host ''; Write-Host ('=' * 20) 'File Hashes' ('=' * 20); Write-Host ''; foreach($hash in $hs) { Write-Host ('{0,-10}: {1}' -f $hash.Algorithm, $hash.Hash) } } if($hdStreams){ Write-Host ''; Write-Host ('=' * 20) 'Hidden Data Streams' ('=' * 20); Write-Host ''; foreach($stream in $hdStreams){ Write-Host ('Stream: {0}' -f $stream.'Stream Name'); Write-Host ('Content: {0}' -f $stream.Content); Write-Host ('=' * 50) } }\""
 
 
 ; File Information Section
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\02fileinfo]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\02fileinfo]
 "MUIVerb"="File Information"
 "SubCommands"=""
 
 ; Show File Size
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\02fileinfo\shell\01size]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\02fileinfo\shell\01size]
 "MUIVerb"="Show File Size"
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\02fileinfo\shell\01size\command]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\02fileinfo\shell\01size\command]
 @="powershell.exe -NoExit -Command \"$fi=Get-Item -LiteralPath '%1'; function Format-FileSize{ param([double]$s); $u=@('bytes','KB','MB','GB','TB','PB'); $i=0; while($s -ge 1KB -and $i -lt $u.Count-1){ $s/=1KB; $i++ } '{0:N2} {1}' -f $s,$u[$i] }; $fsz=Format-FileSize $fi.Length; Write-Host 'File Size: ' $fsz\""
 
 ; Show File Dates
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\02fileinfo\shell\02dates]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\02fileinfo\shell\02dates]
 "MUIVerb"="Show File Dates"
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\02fileinfo\shell\02dates\command]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\02fileinfo\shell\02dates\command]
 @="powershell.exe -NoExit -Command \"Get-Item -LiteralPath '%1' | Select-Object CreationTime,LastWriteTime,LastAccessTime | Format-List\""
 
 ; Show File Owner
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\02fileinfo\shell\03owner]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\02fileinfo\shell\03owner]
 "MUIVerb"="Show File Owner"
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\02fileinfo\shell\03owner\command]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\02fileinfo\shell\03owner\command]
 @="powershell.exe -NoExit -Command \"$own=(Get-Acl -LiteralPath '%1').Owner; Write-Host 'Owner: ' $own\""
 
 ; Check File Entropy
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\02fileinfo\shell\04entropy]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\02fileinfo\shell\04entropy]
 "MUIVerb"="Check File Entropy"
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\02fileinfo\shell\04entropy\command]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\02fileinfo\shell\04entropy\command]
 @="powershell.exe -NoExit -Command \"function Compute-Entropy{ param([byte[]]$byteArray); $byteLength=$byteArray.Length; if($byteLength -eq 0){ return 0.0 } $byteFrequencies=@{}; foreach($byte in $byteArray){ $byteFrequencies[$byte]=($byteFrequencies[$byte]+1) } $entropyValue=0.0; foreach($frequencyCount in $byteFrequencies.Values){ $byteProbability=$frequencyCount/$byteLength; $entropyValue-=$byteProbability*[Math]::Log($byteProbability,2) } [Math]::Round($entropyValue,3) } function Compute-EntropyEstimate{ param([string]$filePath, [int]$sampleSizeBytes); try{ $fileItem=Get-Item -LiteralPath $filePath -ErrorAction Stop; $fileSize=$fileItem.Length; $sampleBuffer=New-Object byte[] $sampleSizeBytes; $fileStream=[System.IO.File]::OpenRead($filePath); $randomStart=Get-Random -Minimum 0 -Maximum ($fileSize - $sampleSizeBytes); $fileStream.Seek($randomStart, [System.IO.SeekOrigin]::Begin) | Out-Null; $bytesRead=$fileStream.Read($sampleBuffer, 0, $sampleSizeBytes); $fileStream.Close(); if($bytesRead -gt 0){ return Compute-Entropy -byteArray $sampleBuffer[0..($bytesRead - 1)] }else{ return 0.0 } }catch{ return 0.0 } } function Compute-FileEntropyInChunks{ param([string]$filePath, [int]$chunkSizeBytes); $entropySum=0.0; $totalBytesProcessed=0; $chunkBuffer=New-Object byte[] $chunkSizeBytes; try{ $fileItem=Get-Item -LiteralPath $filePath -ErrorAction Stop; $totalChunks=[math]::Ceiling($fileItem.Length / $chunkSizeBytes); $fileStream=[System.IO.File]::OpenRead($filePath); while($bytesRead=$fileStream.Read($chunkBuffer, 0, $chunkSizeBytes)){ if($bytesRead -eq 0){ continue } $chunkData=$chunkBuffer[0..($bytesRead - 1)]; $totalBytesProcessed+=$bytesRead; $entropySum+=(Compute-Entropy -byteArray $chunkData)*$bytesRead; } $fileStream.Close(); }catch{ return 0.0 } if($totalBytesProcessed -gt 0){ [math]::Round($entropySum / $totalBytesProcessed, 3) }else{ 0.0 } } $ent='N/A'; try{ $fp='\"%1\"'; $fs=(Get-Item -LiteralPath $fp).Length; $fsMB=$fs / 1MB; if($fsMB -le 20){ $chunkSizeBytes=5MB; $ent=Compute-FileEntropyInChunks -filePath $fp -chunkSizeBytes $chunkSizeBytes; }else{ $sampleSizeBytes=20MB; $ent=Compute-EntropyEstimate -filePath $fp -sampleSizeBytes $sampleSizeBytes; } }catch{ $ent='N/A' } Write-Host 'File Entropy: ' $ent;\""
 
 ; Check for Hidden Data Streams
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\02fileinfo\shell\05hiddenstreams]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\02fileinfo\shell\05hiddenstreams]
 "MUIVerb"="Check for Hidden Data"
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\02fileinfo\shell\05hiddenstreams\command]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\02fileinfo\shell\05hiddenstreams\command]
 @="powershell.exe -NoExit -Command \"$fp='\"%1\"'; $hdStreams=@(); $st=Get-Item -LiteralPath $fp -Stream * -EA SilentlyContinue; if($st){ $sl=$st | Where-Object { ($_.Stream.TrimStart(':')).ToLower() -ne '$data' -and ($_.Stream.TrimStart(':')).ToLower() -ne 'zone.identifier' }; if($sl){ foreach($s in $sl){ $streamName=$s.Stream.TrimStart(':'); try{ $content=Get-Content -LiteralPath $fp -Stream $s.Stream -Raw -ErrorAction Stop; if($content -eq ''){ $content='[Empty Stream]' } }catch{ $content='[Unable to read stream]' } $hdStreams+=[PSCustomObject]@{'Stream Name'=$streamName; 'Content'=$content} } } } if($hdStreams){ Write-Host '=== Hidden Data Streams ==='; foreach($stream in $hdStreams){ Write-Host 'Stream Name: ' $stream.'Stream Name'; Write-Host 'Content: ' $stream.Content; Write-Host '----------------------------------------'; } }else{ Write-Host 'No hidden data streams found.' }\""
 
 ; Download Source Information
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\02fileinfo\shell\06downloadinfo]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\02fileinfo\shell\06downloadinfo]
 "MUIVerb"="Show Download Source"
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\02fileinfo\shell\06downloadinfo\command]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\02fileinfo\shell\06downloadinfo\command]
 @="powershell.exe -NoExit -Command \"$zd=Get-Content -LiteralPath '%1' -Stream Zone.Identifier -EA SilentlyContinue; if($zd){ $zf=@{}; foreach($l in $zd){ if($l -match '^(.+?)=(.+)$'){ $zf[$matches[1]]=$matches[2] } } $zf|Format-List }else{ Write-Host 'No download source information found.' }\""
 
 ; Content Analysis Section
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\03contentanalysis]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\03contentanalysis]
 "MUIVerb"="Content Analysis"
 "SubCommands"=""
 
 ; Line Count
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\03contentanalysis\shell\01linecount]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\03contentanalysis\shell\01linecount]
 "MUIVerb"="Count Lines"
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\03contentanalysis\shell\01linecount\command]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\03contentanalysis\shell\01linecount\command]
 @="powershell.exe -NoExit -Command \"$cnt=Get-Content -LiteralPath '%1' -EA SilentlyContinue; if($cnt){ $lc=($cnt|Measure-Object -Line).Lines; Write-Host 'Total Lines: ' $lc }else{ Write-Host 'Unable to read file as text.' }\""
 
 ; Word Count
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\03contentanalysis\shell\02wordcount]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\03contentanalysis\shell\02wordcount]
 "MUIVerb"="Count Words"
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\03contentanalysis\shell\02wordcount\command]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\03contentanalysis\shell\02wordcount\command]
 @="powershell.exe -NoExit -Command \"$cnt=Get-Content -LiteralPath '%1' -EA SilentlyContinue; if($cnt){ $wc=($cnt|Measure-Object -Word).Words; Write-Host 'Total Words: ' $wc }else{ Write-Host 'Unable to read file as text.' }\""
 
 ; Hashes Section
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\04hashes]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\04hashes]
 "MUIVerb"="Hashes"
 "SubCommands"=""
 
 ; All Hashes
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\04hashes\shell\01allhashes]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\04hashes\shell\01allhashes]
 "MUIVerb"="All Hashes"
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\04hashes\shell\01allhashes\command]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\04hashes\shell\01allhashes\command]
 @="powershell.exe -NoExit -Command \"$fp='\"%1\"'; $algs=@('MD5','SHA1','SHA256','SHA384','SHA512'); $hs=@(); $unsupportedAlgs=@(); foreach($a in $algs){ try{ $h=Get-FileHash -LiteralPath $fp -Algorithm $a; $hs+=[PSCustomObject]@{Algorithm=$h.Algorithm;Hash=$h.Hash} }catch{ $unsupportedAlgs+=$a } } if($hs){ Write-Host '=== Hashes ==='; $hs|Format-Table -Wrap -AutoSize } if($unsupportedAlgs){ Write-Host 'Unsupported Hash Algorithms:'; Write-Host ($unsupportedAlgs -join ', ') }\""
 
 ; MD5 Hash
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\04hashes\shell\02md5]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\04hashes\shell\02md5]
 "MUIVerb"="MD5 Hash"
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\04hashes\shell\02md5\command]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\04hashes\shell\02md5\command]
 @="powershell.exe -NoExit -Command \"try{ Get-FileHash -LiteralPath '%1' -Algorithm MD5 | Format-List }catch{ Write-Host 'MD5 algorithm not available.' }\""
 
 ; SHA1 Hash
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\04hashes\shell\03sha1]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\04hashes\shell\03sha1]
 "MUIVerb"="SHA1 Hash"
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\04hashes\shell\03sha1\command]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\04hashes\shell\03sha1\command]
 @="powershell.exe -NoExit -Command \"try{ Get-FileHash -LiteralPath '%1' -Algorithm SHA1 | Format-List }catch{ Write-Host 'SHA1 algorithm not available.' }\""
 
 ; SHA256 Hash
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\04hashes\shell\04sha256]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\04hashes\shell\04sha256]
 "MUIVerb"="SHA256 Hash"
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\04hashes\shell\04sha256\command]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\04hashes\shell\04sha256\command]
 @="powershell.exe -NoExit -Command \"try{ Get-FileHash -LiteralPath '%1' -Algorithm SHA256 | Format-List }catch{ Write-Host 'SHA256 algorithm not available.' }\""
 
 ; SHA384 Hash
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\04hashes\shell\05sha384]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\04hashes\shell\05sha384]
 "MUIVerb"="SHA384 Hash"
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\04hashes\shell\05sha384\command]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\04hashes\shell\05sha384\command]
 @="powershell.exe -NoExit -Command \"try{ Get-FileHash -LiteralPath '%1' -Algorithm SHA384 | Format-List }catch{ Write-Host 'SHA384 algorithm not available.' }\""
 
 ; SHA512 Hash
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\04hashes\shell\06sha512]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\04hashes\shell\06sha512]
 "MUIVerb"="SHA512 Hash"
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\04hashes\shell\06sha512\command]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\04hashes\shell\06sha512\command]
 @="powershell.exe -NoExit -Command \"try{ Get-FileHash -LiteralPath '%1' -Algorithm SHA512 | Format-List }catch{ Write-Host 'SHA512 algorithm not available.' }\""
 
 ; Digital Signature Section
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\05signature]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\05signature]
 "MUIVerb"="Digital Signature"
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\05signature\command]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\05signature\command]
 @="powershell.exe -NoExit -Command \"$sig=Get-AuthenticodeSignature -LiteralPath '%1'; $sig|Format-List\""
 
 ; File Version Information
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\06fileversion]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\06fileversion]
 "MUIVerb"="File Version Info"
 
-[HKEY_CLASSES_ROOT\*\shell\fileanalysis\shell\06fileversion\command]
+[HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\06fileversion\command]
 @="powershell.exe -NoExit -Command \"$fp='\"%1\"'; $vi=[Diagnostics.FileVersionInfo]::GetVersionInfo($fp); $vi|Format-List\""
