@@ -1,4 +1,18 @@
 Windows Registry Editor Version 5.00
+; This `.reg` file allows you to right-click on any file and quickly identify useful information about it. 
+; As admin, open cmd.exe, type "<path_to_file>\File_Analysis_Quick_Menu.reg", and press enter.
+; 1. Show File Size
+; 2. Show File Dates
+; 3. Show File Owner
+; 4. Check File Entropy
+; 5. Check for Hidden Data Streams
+; 6. Download Link
+; 7. Line Count
+; 8. Word Count
+; 9. Hashes
+; 10. Digital Signature
+; 11. File Version and other metadata
+
 ; File Analysis Context Menu
 
 [HKEY_CLASSES_ROOT\*\shell\fileanalysis]
