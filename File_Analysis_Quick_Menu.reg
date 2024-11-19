@@ -63,7 +63,7 @@ Windows Registry Editor Version 5.00
 
 ; Check for Hidden Data Streams
 [HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\02fileinfo\shell\05hiddenstreams]
-"MUIVerb"="Check for Hidden Data"
+"MUIVerb"="Check for Hidden Streams"
 
 [HKEY_CLASSES_ROOT\*\shell\DMfileanalysis\shell\02fileinfo\shell\05hiddenstreams\command]
 @="powershell.exe -NoExit -Command \"$fp='\"%1\"'; $hdStreams=@(); $st=Get-Item -LiteralPath $fp -Stream * -EA SilentlyContinue; if($st){ $sl=$st | Where-Object { ($_.Stream.TrimStart(':')).ToLower() -ne '$data' -and ($_.Stream.TrimStart(':')).ToLower() -ne 'zone.identifier' }; if($sl){ foreach($s in $sl){ $streamName=$s.Stream.TrimStart(':'); try{ $content=Get-Content -LiteralPath $fp -Stream $s.Stream -Raw -ErrorAction Stop; if($content -eq ''){ $content='[Empty Stream]' } }catch{ $content='[Unable to read stream]' } $hdStreams+=[PSCustomObject]@{'Stream Name'=$streamName; 'Content'=$content} } } } if($hdStreams){ Write-Host '=== Hidden Data Streams ==='; foreach($stream in $hdStreams){ Write-Host 'Stream Name: ' $stream.'Stream Name'; Write-Host 'Content: ' $stream.Content; Write-Host '----------------------------------------'; } }else{ Write-Host 'No hidden data streams found.' }\""
